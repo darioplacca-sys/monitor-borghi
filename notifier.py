@@ -31,15 +31,28 @@ def build_email_body(nuovi: list[Atto], salvati: dict) -> str:
     )
 
 
+REQUIRED_VARS = ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "EMAIL_TO"]
+
+
 def send_notification(nuovi: list[Atto], salvati: dict) -> None:
     if not nuovi:
         return
 
+    mancanti = [v for v in REQUIRED_VARS if not os.environ.get(v)]
+    if mancanti:
+        print(
+            f"Notifica email saltata: variabili non configurate: {', '.join(mancanti)}. "
+            "Configura i secrets su GitHub (Settings -> Secrets and variables -> Actions) "
+            "per ricevere le notifiche."
+        )
+        return
+
     host = os.environ["SMTP_HOST"]
-    port = int(os.environ.get("SMTP_PORT", "587"))
+    port_raw = os.environ.get("SMTP_PORT", "").strip()
+    port = int(port_raw) if port_raw else 587
     user = os.environ["SMTP_USER"]
     password = os.environ["SMTP_PASSWORD"]
-    email_from = os.environ.get("EMAIL_FROM", user)
+    email_from = os.environ.get("EMAIL_FROM") or user
     email_to = os.environ["EMAIL_TO"]
 
     msg = MIMEMultipart()
