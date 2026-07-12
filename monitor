@@ -1,0 +1,81 @@
+# Borghi Monitor
+
+Monitora automaticamente la sezione "Amministrazione Trasparente" del Comune
+di Borghi (FC) e scarica in autonomia i PDF di delibere (Giunta/Consiglio) e
+determine appena pubblicate, per archiviarle oltre i 15 giorni minimi di
+pubblicazione obbligatoria.
+
+## Come funziona
+
+1. **`scraper.py`** — legge le prime pagine delle liste "Delibere" e
+   "Determine" sul portale (HTML statico, già ordinato dal più recente).
+   Confronta gli ID trovati con `state.json` per capire quali sono nuovi.
+2. **`downloader.py`** — per ogni atto nuovo, apre la pagina di dettaglio,
+   decodifica il link di download (codificato in base64 nell'HTML) e scarica
+   il PDF **non firmato digitalmente** (versione semplice, leggibile da
+   chiunque) in `archivio/{delibere|determine}/{anno}/`.
+3. **`notifier.py`** — invia una email riassuntiva con l'elenco dei nuovi atti.
+4. **`main.py`** — orchestra i tre passaggi sopra.
+5. **`.github/workflows/monitor.yml`** — esegue `main.py` ogni giorno alle
+   7:00 UTC via GitHub Actions, e committa automaticamente i nuovi PDF nel
+   repository (così hai uno storico versionato, gratuito, senza server).
+
+## Setup
+
+### 1. Crea un repository su GitHub
+
+Carica questa cartella (`borghi-monitor/`) come repository, **privato** se
+preferisci (i PDF sono comunque dati pubblici, ma magari non vuoi un repo
+pubblico che "segnala" cosa monitori).
+
+### 2. Configura l'invio email
+
+Se usi Gmail:
+1. Attiva la verifica in due passaggi sul tuo account Google
+2. Crea una "password per le app" su https://myaccount.google.com/apppasswords
+3. Nel repository GitHub, vai su **Settings → Secrets and variables →
+   Actions → New repository secret** e aggiungi:
+
+| Nome secret      | Valore                                  |
+|-------------------|------------------------------------------|
+| `SMTP_HOST`       | `smtp.gmail.com`                        |
+| `SMTP_PORT`       | `587`                                   |
+| `SMTP_USER`       | la tua email Gmail                      |
+| `SMTP_PASSWORD`   | la password per le app (16 caratteri)   |
+| `EMAIL_FROM`      | la tua email Gmail                      |
+| `EMAIL_TO`        | dove vuoi ricevere le notifiche         |
+
+Altri provider (Outlook, provider dedicati come Resend/SendGrid) funzionano
+allo stesso modo, cambiano solo host/porta.
+
+### 3. Attiva il workflow
+
+Una volta pushato il codice con i secrets configurati, il workflow parte da
+solo ogni giorno. Puoi anche avviarlo manualmente da GitHub: tab **Actions →
+Monitor Amministrazione Trasparente Borghi → Run workflow**.
+
+## Uso locale (facoltativo, per test)
+
+```bash
+pip install -r requirements.txt
+export SMTP_HOST=... SMTP_PORT=... SMTP_USER=... SMTP_PASSWORD=... EMAIL_FROM=... EMAIL_TO=...
+python main.py
+```
+
+Se vuoi solo testare lo scraping senza inviare email né scaricare:
+
+```bash
+python scraper.py
+```
+
+## Note
+
+- Il sito ha `robots.txt` che disabilita il crawling automatico generico
+  (motori di ricerca); questo script non è un crawler di massa — accede
+  solo alle poche pagine di elenco/dettaglio necessarie, con una pausa tra
+  le richieste, per uso personale di archiviazione di dati già pubblici e
+  legalmente destinati alla pubblicazione.
+- Se il layout del portale cambia, i selettori CSS in `scraper.py` e
+  `downloader.py` andranno aggiornati di conseguenza.
+- `state.json` tiene traccia degli atti già visti: se lo cancelli, al giro
+  successivo tutti gli atti della prima pagina risulteranno "nuovi".
